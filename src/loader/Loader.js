@@ -1685,6 +1685,9 @@ Phaser.Loader.prototype = {
     */
     xmlLoadComplete: function (index) {
 
+        var data = this._xhr.responseText;
+        var xml;
+
         if (this._xdr && this._xdr.responseText) {
             if (this._xdr.contentType !== '' && this._xdr.contentType !== 'text/plain')
             {
@@ -1701,9 +1704,6 @@ Phaser.Loader.prototype = {
             }
             data = this._xhr.responseText;
         }
-
-        var data = this._xhr.responseText;
-        var xml;
 
         try
         {

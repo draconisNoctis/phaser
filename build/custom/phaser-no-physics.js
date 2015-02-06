@@ -7,7 +7,7 @@
 *
 * Phaser - http://phaser.io
 *
-* v2.2.2 "Alkindar" - Built: Tue Jan 06 2015 06:57:42
+* v2.2.2 "Alkindar" - Built: Fri Feb 06 2015 13:59:44
 *
 * By Richard Davey http://www.photonstorm.com @photonstorm
 *
@@ -56417,7 +56417,7 @@ Phaser.Loader = function (game) {
     * @property {XDomainRequest} - An ajax request used specifically by IE9 for CORs loading issues.
     * @private
     */
-    this._ajax = null;
+    this._xdr = null;
 
 };
 
@@ -57561,42 +57561,7 @@ Phaser.Loader.prototype = {
 
             case 'json':
 
-                if (this.useXDomainRequest && window.XDomainRequest)
-                {
-                    this._ajax = new window.XDomainRequest();
-
-                    // XDomainRequest has a few quirks. Occasionally it will abort requests
-                    // A way to avoid this is to make sure ALL callbacks are set even if not used
-                    // More info here: http://stackoverflow.com/questions/15786966/xdomainrequest-aborts-post-on-ie-9
-                    this._ajax.timeout = 3000;
-
-                    this._ajax.onerror = function () {
-                        return _this.dataLoadError(_this._fileIndex);
-                    };
-
-                    this._ajax.ontimeout = function () {
-                        return _this.dataLoadError(_this._fileIndex);
-                    };
-
-                    this._ajax.onprogress = function() {};
-
-                    this._ajax.onload = function(){
-                        return _this.jsonLoadComplete(_this._fileIndex);
-                    };
-
-                    this._ajax.open('GET', this.baseURL + file.url, true);
-
-                    //  Note: The xdr.send() call is wrapped in a timeout to prevent an issue with the interface where some requests are lost
-                    //  if multiple XDomainRequests are being sent at the same time.
-                    setTimeout(function () {
-                        _this._ajax.send();
-                    }, 0);
-                }
-                else
-                {
-                    this.xhrLoad(this._fileIndex, this.baseURL + file.url, 'text', 'jsonLoadComplete', 'dataLoadError');
-                }
-
+                this.xhrLoad(this._fileIndex, this.baseURL + file.url, 'text', 'jsonLoadComplete', 'dataLoadError');
                 break;
 
             case 'xml':
@@ -57645,11 +57610,40 @@ Phaser.Loader.prototype = {
     * @param {string} onerror - A String of the name of the local function to be called on a file load error.
     */
     xhrLoad: function (index, url, type, onload, onerror) {
+        var _this = this;
+
+        if(this.useXDomainRequest && window.XDomainRequest) {
+            if(!this._xdr) {
+                this._xdr = new XDomainRequest();
+                this._xdr.timeout = 3000;
+                this._xdr.onprogress = function () {};
+            }
+
+            this._xdr.onload = function () {
+                _this[onload](index);
+            };
+
+            this._xdr.onerror = function () {
+                _this[onerror](index);
+            };
+
+            this._xdr.ontimeout = function () {
+                _this[onerror](index);
+            };
+
+            this._xdr.open("GET", url, true);
+            this._xdr.responseType = type;
+
+            setTimeout(function () {
+                _this._xdr.send();
+            });
+
+            return;
+        }
 
         this._xhr.open("GET", url, true);
-        this._xhr.responseType = type;
 
-        var _this = this;
+        this._xhr.responseType = type;
 
         this._xhr.onload = function () {
             return _this[onload](index);
@@ -57884,9 +57878,9 @@ Phaser.Loader.prototype = {
 
         var file = this._fileList[index];
 
-        if (this._ajax && this._ajax.responseText)
+        if (this._xdr && this._xdr.responseText)
         {
-            var data = JSON.parse(this._ajax.responseText);
+            var data = JSON.parse(this._xdr.responseText);
         }
         else
         {
@@ -57964,14 +57958,25 @@ Phaser.Loader.prototype = {
     */
     xmlLoadComplete: function (index) {
 
-        if (this._xhr.responseType !== '' && this._xhr.responseType !== 'text')
-        {
-            console.warn('Invalid XML Response Type', this._fileList[index]);
-            console.warn(this._xhr);
-        }
-
         var data = this._xhr.responseText;
         var xml;
+
+        if (this._xdr && this._xdr.responseText) {
+            if (this._xdr.contentType !== '' && this._xdr.contentType !== 'text/plain')
+            {
+                console.warn('Invalid XML Response Type', this._fileList[index]);
+                console.warn(this._xdr);
+            }
+            data = this._xdr.responseText;
+        }
+        else if (this._xhr && this._xhr.responseText) {
+            if (this._xhr.responseType !== '' && this._xhr.responseType !== 'text')
+            {
+                console.warn('Invalid XML Response Type', this._fileList[index]);
+                console.warn(this._xhr);
+            }
+            data = this._xhr.responseText;
+        }
 
         try
         {
